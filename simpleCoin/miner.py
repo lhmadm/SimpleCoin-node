@@ -57,12 +57,57 @@ def create_genesis_block():
 # Node's blockchain copy
 BLOCKCHAIN = [create_genesis_block()]
 
+# Active peer list. It is initialized from miner_config.py and later expanded
+# using peer discovery requests.
+KNOWN_PEER_NODES = set(PEER_NODES)
+
 """ Stores the transactions that this node has in a list.
 If the node you sent the transaction adds a block
 it will get accepted, but there is a chance it gets
 discarded and your transaction goes back as if it was never
 processed"""
 NODE_PENDING_TRANSACTIONS = []
+
+
+def normalize_node_url(node_url):
+    if not node_url:
+        return None
+    normalized = node_url.strip().rstrip('/')
+    if not normalized:
+        return None
+    return normalized
+
+
+def register_peer(node_url):
+    normalized = normalize_node_url(node_url)
+    if not normalized:
+        return False
+    if normalized == normalize_node_url(MINER_NODE_URL):
+        return False
+    KNOWN_PEER_NODES.add(normalized)
+    return True
+
+
+def bootstrap_peer_discovery():
+    # First normalize all peers loaded from configuration.
+    for peer in list(KNOWN_PEER_NODES):
+        KNOWN_PEER_NODES.discard(peer)
+        register_peer(peer)
+
+    this_node = normalize_node_url(MINER_NODE_URL)
+
+    for peer in list(KNOWN_PEER_NODES):
+        try:
+            requests.post(
+                url=peer + '/register_peer',
+                json={'node_url': this_node},
+                timeout=3
+            )
+            discovered = requests.get(url=peer + '/peers', timeout=3).json()
+            for discovered_peer in discovered.get('peers', []):
+                register_peer(discovered_peer)
+        except requests.RequestException:
+            continue
 
 
 def proof_of_work(last_proof, blockchain):
@@ -141,9 +186,12 @@ def mine(a, blockchain, node_pending_transactions):
 def find_new_chains():
     # Get the blockchains of every other node
     other_chains = []
-    for node_url in PEER_NODES:
+    for node_url in list(KNOWN_PEER_NODES):
         # Get their chains using a GET request
-        block = requests.get(url = node_url + "/blocks").content
+        try:
+            block = requests.get(url = node_url + "/blocks", timeout=3).content
+        except requests.RequestException:
+            continue
         # Convert the JSON object to a Python dictionary
         block = json.loads(block)
         # Verify other node block is correct
@@ -233,6 +281,21 @@ def transaction():
         return pending
 
 
+@node.route('/peers', methods=['GET'])
+def get_peers():
+    peers = sorted(KNOWN_PEER_NODES)
+    return json.dumps({'peers': peers}, sort_keys=True)
+
+
+@node.route('/register_peer', methods=['POST'])
+def register_peer_endpoint():
+    payload = request.get_json() or {}
+    node_url = payload.get('node_url')
+    if register_peer(node_url):
+        return 'Peer added\n', 201
+    return 'Peer ignored\n', 200
+
+
 def validate_signature(public_key, signature, message):
     """Verifies if the signature is correct. This is used to prove
     it's you (and not someone else) trying to do a transaction with your
@@ -259,6 +322,7 @@ def welcome_msg():
 
 if __name__ == '__main__':
     welcome_msg()
+    bootstrap_peer_discovery()
     # Start mining
     pipe_output, pipe_input = Pipe()
     miner_process = Process(target=mine, args=(pipe_output, BLOCKCHAIN, NODE_PENDING_TRANSACTIONS))

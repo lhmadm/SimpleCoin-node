@@ -59,6 +59,17 @@ This file is probably the most important. Running it will create a node (like a 
 The following flowchart provides a simple , high-level understanding of what the miner does
 ![MinerFlowchart](images/flowchart.png)
 
+
+### Peer discovery
+
+Miner nodes can now discover each other dynamically.
+
+- Add one or more bootstrap peers in `simpleCoin/miner_config.py` (`PEER_NODES`).
+- When `miner.py` starts, it shares its URL with each bootstrap peer and fetches their known peers.
+- Each miner exposes:
+  - `GET /peers` to list currently known peers
+  - `POST /register_peer` with JSON `{ "node_url": "http://host:port" }` to register a peer
+
 ### Wallet.py
 
 This file is for those who don't want to be nodes but simple users. Running this file allows you to generate a new address, send coins and check your transaction history (keep in mind that if you are running this in a local server, you will need a "miner" to process your transaction).
