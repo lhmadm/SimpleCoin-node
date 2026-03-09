@@ -31,6 +31,8 @@ Then you have 2 options:
 - Run ```miner.py``` to become a node and start mining
 - Run ```wallet.py``` to become a user and send transactions (to send transactions you must run a node, in other words, you must run ```miner.py``` too)
 
+- Run ```simpleCoin/flet_runner.py``` to launch a small UI (built with Flet) that can start/stop both ```miner.py``` and ```wallet.py``` and show their running status/logs.
+
 > Important: DO NOT run it in the python IDLE, run it in your console. The ```miner.py``` uses parallel processing that doesn't work in the python IDLE.
 
 ## How this code work?
